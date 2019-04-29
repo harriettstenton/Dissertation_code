@@ -1,2 +1,261 @@
-copy and paste the code with one species 
-include the lagoon code 
+library(raster)
+# Package to handle raster-formatted spatial data
+library(rasterVis)
+# The rasterVis package complements the raster package, providing a set of methods for enhanced visualization and interaction
+library(dismo)
+# Dismo has the SDM analyses for maxent and support vector machines
+library(rgeos)
+# To define circles with a radius around the subsampled points
+library(rJava)
+# Needed to interface R and Java for maxent functions
+library(rgdal)
+# Used for co-ordinate reference system
+library(sp)
+# Used for co-ordinate reference system
+library(ncdf4)
+# Options for using NetCDF files
+library(kernlab)
+# Required for support vector machines
+library(grDevices)
+# For colouring maps
+library(colorRamps)
+# Where I've written #NOTE you may need to edit things
+
+# Load the table of latitude and longitude coordinates for a species
+# must contain a header that has "X" and "Y" and is in same projection sapce as the environmental data.
+# one line per point
+# other columns ignored
+
+locs = read.csv("C:\\Users\\harri\\Documents\\Dissertation\\Dissertation\\r_data\\New_Records\\finaltubificoides.csv", header=T, sep = ",")
+
+
+# Load environmental rasters, No turbines or lagoons. The Severn as it is today.
+# Edit these to match the rasters (.tif) I gave you
+# edit the variable names *AND* change the names below too to match (i.e. do a search and replace)
+# for example, change:
+#
+#   nc_pelag_food<-raster("ref2_fod_pel.nc")
+# to
+#   nc_velocity<-raster("velocity.tif")
+# (the variable name can be anything, but make it easier for yourself and make it descriptive)
+# then change all instances of "nc_pelag_food" to "nc_velocity"
+#NOTE
+nc_depth<-raster("bathy_masked.tif")
+av_velocity<-raster("av_vel_masked.tif")
+max_velocity<-raster("max_vel_masked.tif")
+#min_elevat<-raster("min_elev_masked.tif")
+max_elevat<-raster("max_elev_masked.tif")
+#always_dry<-raster("always_dry_masked.tif")
+#intertidal<-raster("intertidal_masked.tif")
+#subtidal<-raster("subtidal_masked.tif")
+tidal_range<-("tidal_range_masked.tif")
+# we might need to make these - commented out for now
+# try without and if it looks crap we can talk.
+#distance_to_coast<-raster("distance_to_coast_fixed.tif")
+#lats<-raster("lat.tif")
+#lons<-raster("lon.tif")
+
+# this makes sure that "land" is not used in the model
+mask <- nc_depth
+# add to lons, lat and dist_to_coast
+#distance_to_coast <- mask(distance_to_coast, mask)
+#lats <- mask(lats, mask)
+#lons <- mask(lons, mask)
+
+
+# Extract depth values to table of species co-ordinates
+locs_ext=extract(nc_depth, locs[,c("X","Y")])
+
+# Build a data frame of species occurrence data and depth data
+locs = data.frame(locs, locs_ext)
+
+# Remove points with NA values for depth, i.e. on land
+locs = subset(locs, !is.na(locs_ext))
+
+e = extent(nc_depth)
+
+# Create sequences of X and Y values to define a grid
+# this a 1x1 km grid
+xgrid = seq(e@xmin,e@xmax,1000)
+ygrid = seq(e@ymin,e@ymax,1000)
+
+# Identify occurrence points within each grid cell, then draw one at random
+subs = c()
+for(i in 1:(length(xgrid)-1)) {
+    for(j in 1:(length(ygrid)-1)) {
+        gridsq = subset(locs, Y > ygrid[j] & Y < ygrid[j+1] & X > xgrid[i] & X < xgrid[i+1])
+        if(dim(gridsq)[1]>0) {
+            subs = rbind(subs, gridsq[sample(1:dim(gridsq)[1],1 ), ])
+        }
+    }
+}
+dim(locs);dim(subs) # Confirm that you have a smaller dataset than you started with (1st number)
+
+
+# Assign correct co-ordinate reference system to subset
+coordinates <- cbind(subs$X, subs$Y)
+subs_df <- SpatialPointsDataFrame(coordinates, subs, proj4string=CRS("+proj=utm +zone=30 ellps=WGS84"))
+
+# we create 20,000 random "background points". There are other ways to do this, but start with this.
+#NOTE
+psa <- randomPoints(mask, 20000, ext=e)
+
+# Stack raster layers into one variable
+#NOTE (make it match your environmental variables from above)
+env_uk<-stack(nc_depth,av_velocity,tidal_range,max_velocity,max_elevat)
+
+# Pull environmental data for the sumbsampled-presence points from the raster stack
+presence_uk= extract(env_uk, subs_df[,c("X","Y")])
+
+# Pull environmental data for the pseudo-absence points from the raster stack
+pseudo_uk = extract(env_uk, psa)
+
+# Build some useful dataframes, with two columns of coordinates followed by the environmental variables. For the presence points:
+presence_uk = data.frame(X=subs_df$X, Y=subs_df$Y, presence_uk)
+
+# Convert psa from atomic vector matrix to data.frame
+psapoints=data.frame(psa)
+# Bind co-ordinates
+coordinates <- cbind(psapoints$x, psapoints$y)
+# Create spatial data frame of pseudo absences
+psadf <- SpatialPointsDataFrame(coordinates, psapoints, proj4string=CRS("+proj=utm +zone=30 ellps=WGS84"))
+
+# Build dataframe, with two columns of coordinates followed by the 5 environmental variables. For the pseudo-absences:
+psadfx = psadf@coords
+colnames(psadfx) = c("X","Y")
+pseudo_uk = data.frame(cbind(psadfx,pseudo_uk))
+
+# Vector of group assignments splitting the subsampled presence points data fram with environmental data into 5 groups
+group_p = kfold(presence_uk, 5)
+
+# Repeat above step for pseudo-absence points
+group_a = kfold(pseudo_uk, 5)
+
+# create output required for the loop
+evaluations = list(5)
+models = list(5)
+
+# where it says maxent - you may need to swap this for other functions if you're exploring different models
+# Note that some model may need different inputs etc. Read the docs to figure this out.
+
+# This is our k-fold test. You will want to spend a bit of time making predictions on each of the 5 sub-models
+# created here to check you can make decent predictions even with missing data
+for (test in 1:5) {
+
+    # Then we use test and the kfold groupings to divide the presence and absence points:
+    train_p = presence_uk[group_p!=test, c("X","Y")]
+    train_a = pseudo_uk[group_a!=test, c("X","Y")]
+    test_p = presence_uk[group_p==test, c("X","Y")]
+    test_a = pseudo_uk[group_a==test, c("X","Y")]
+
+    # Now, estimate a maxent model using the "training" points and the environmental data. This may take a few moments to run:
+    models[test] = maxent(env_uk, p=train_p, a=train_a)
+
+    # To validate the model, we use the appropriately named function.
+    # Produces warning message about implicit list embedding being depreciated. May fail in future versions of R
+    evaluations[test] = evaluate(test_p, test_a, models[[test]], env_uk)
+}
+
+# prints out the AUC for the k-fold tests
+# ideally should be > 0.75 for all
+cat("K-FOLD AUC: ")
+for (test in 1:5) {
+    cat(paste0(evaluations[[test]]@auc,","))
+}
+cat("\n")
+
+
+# Assess Spatial Sorting Bias (SSB)
+pres_train_me <- train_p
+pres_test_me <- test_p
+back_train_me <- train_a
+back_test_me <- test_a
+sb <- ssb(pres_test_me, back_test_me, pres_train_me)
+sb[,1] / sb[,2]
+
+# Adjust for SSB if present via distance based point-wise sampling
+i <- pwdSample(pres_test_me, back_test_me, pres_train_me, n=1, tr=0.1)
+pres_test_pwd_me <- pres_test_me[!is.na(i[,1]), ]
+back_test_pwd_me <- back_test_me[na.omit(as.vector(i)), ]
+sb2 <- ssb(pres_test_pwd_me, back_test_pwd_me, pres_train_me)
+sb2[1]/ sb2[2]
+
+# Your spatial bias test = should be 0 (or close)
+cat("SSB evaluation:")
+cat(paste0(sb[1]/sb[2],","))
+cat(paste0(sb2[1]/sb2[2],","))
+cat("\n")
+
+pres_points = presence_uk[c("X","Y")]
+abs_points = pseudo_uk[c("X","Y")]
+# create full maxent with all points
+model <- maxent(env_uk, p=pres_points, a=abs_points)
+
+# Re-evaluate model...
+#... with SSB adjusted points
+e_ssb<-evaluate(p=pres_test_pwd_me, a=back_test_pwd_me, model, env_uk)
+
+# Evaluation code collected for easy recall of results back to back
+evaluations[1:5]
+e_ssb
+evaluate_full <- evaluate(pres_points, abs_points, model, env_uk)
+message("AUC: ")
+message(evaluate_full@auc)
+message("Thresholds")
+message(threshold(evaluate_full)$spec_sens)
+
+# Visualize the predictions from the model, we estimate its predicted probability of sentinel species presence for every
+# cell in the UK wide data set, then plot those probabilities:
+# Generate the predictions
+#NOTE May need to chnge your output filename to something sensible
+#pred_me_uk5 = predict(model, env_uk, progress='text')
+#pred_me_uk5 = predict(model, env_uk, progress= 'text')
+#writeRaster(pred_me_uk5, filename="kfold1-5.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
+
+# so this is out model based on your species presence points and the modern day Severn environment data
+
+
+#################### This is when we start to make future predictions #########################
+############# Don't run this yet ##############################################################
+################ WE WILL GET TO THIS LATER ####################################################
+
+# Load env data for 1Mw turbines
+#l_depth<-raster("cardiff_max/bathy_masked.tif")
+#l_always_dry<-raster("cardiff_max/always_dry_masked.tif")
+#l_average_velocity<-raster("cardiff_max/av_vel_masked.tif")
+#l_intertidal<-raster("cardiff_max/intertidal_masked.tif")
+#l_max_elevation<-raster("cardiff_max/max_elev_masked.tif")
+#l_min_elevation<-raster("cardiff_max/min_elev_masked.tif")
+#l_max_velocity<-raster("cardiff_max/max_vel_masked.tif")
+#l_subtidal<-raster("cardiff_max/subtidal_masked.tif")
+#l_tidal_range<-raster("cardiff_max/tidal_range_masked.tif")
+
+#d_depth<-raster("dynamic_max/bathy_masked.tif")
+#d_always_dry<-raster("dynamic_max/always_dry_masked.tif")
+#d_average_velocity<-raster("dynamic_max/av_vel_masked.tif")
+#d_max_elevation<-raster("dynamic_max/max_elev_masked.tif")
+#d_min_elevation<-raster("dynamic_max/min_elev_masked.tif")
+#d_max_velocity<-raster("dynamic_max/max_vel_masked.tif")
+#d_subtidal<-raster("dynamic_max/subtidal_masked.tif")
+#d_tidal_range<-raster("dynamic_max/tidal_range_masked.tif")
+#d_intertidal<-raster("dynamic_max/intertidal_masked.tif")
+
+#e_depth<-raster("ecology_max/bathy_masked.tif")
+#e_always_dry<-raster("ecology_max/always_dry_masked.tif")
+#e_average_velocity<-raster("ecology_max/av_vel_masked.tif")
+#e_intertidal<-raster("ecology_max/intertidal_masked.tif")
+#e_max_elevation<-raster("ecology_max/max_elev_masked.tif")
+#e_min_elevation<-raster("ecology_max/min_elev_masked.tif")
+#e_max_velocity<-raster("ecology_max/max_vel_masked.tif")
+#e_subtidal<-raster("ecology_max/subtidal_masked.tif")
+#e_tidal_range<-raster("ecology_max/tidal_range_masked.tif")
+
+
+# Stack raster layers into one file
+env_1<-stack(e_depth,e_max_elevation,e_tidal_range,e_average_velocity,e_min_elevation,e_max_velocity,e_intertidal)
+
+# Now, predict a maxent model using the "trained model" and the environmental data for the Pentland Firth. This may take a few moments to run:
+pred_1 = predict(model, env_1,progress='text')
+writeRaster(pred_1, filename="March_doversole_ecology2.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
+
+
