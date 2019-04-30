@@ -1,1 +1,19 @@
 wilcoxon test code for one species, include the histograms formatting and everything 
+tubificoide_vals<-getvalues(tubificoide)
+hist(tubificoide_vals)
+l_tubificoide_vals<-getvalues(l_tubificoide)
+hist(l_tubificoide_vals)
+d_tubificoide_vals<-getvalues(d_tubificoide)
+hist(d_tubificoide_vals)
+e_tubificoide_vals<-getvalues(e_tubificoide
+
+median(tubificoide_vals, na.rm = TRUE)
+median(l_tubificoide_vals, na.rm = TRUE)
+median(d_tubificoide_vals, na.rm = TRUE)
+median(e_tubificoide_vals, na.rm = TRUE)
+
+wilcox.test(tubificoide_vals, l_tubificoide_vals, conf.int = TRUE)
+wilcox.test(tubificoide_vals, d_tubificoide_vals, conf.int = TRUE)
+wilcox.test(tubificoide_vals, e_tubificoide_vals, conf.int = TRUE)
+
+hist(tubificoide_vals,main = "
