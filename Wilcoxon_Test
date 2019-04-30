@@ -1,4 +1,3 @@
-wilcoxon test code for one species, include the histograms formatting and everything 
 tubificoide_vals<-getvalues(tubificoide)
 hist(tubificoide_vals)
 l_tubificoide_vals<-getvalues(l_tubificoide)
@@ -16,4 +15,7 @@ wilcox.test(tubificoide_vals, l_tubificoide_vals, conf.int = TRUE)
 wilcox.test(tubificoide_vals, d_tubificoide_vals, conf.int = TRUE)
 wilcox.test(tubificoide_vals, e_tubificoide_vals, conf.int = TRUE)
 
-hist(tubificoide_vals,main = "
+hist(tubificoide_vals,main = "Histogram No Lagoon", xlab = "Tubificoide", border = "black", col = "rosybrown3", breaks = 20)
+hist(l_tubificoide_vals,main = "Histogram Static Lagoon", xlab = "Tubificoide", border = "black", col = "rosybrown3", breaks = 20)
+hist(d_tubificoide_vals,main = "Histogram Dynamic Lagoon", xlab = "Tubificoide", border = "black", col = "rosybrown3", breaks = 20)
+hist(e_tubificoide_vals,main = "Histogram Ecological Lagoon", xlab = "Tubificoide", border = "black", col = "rosybrown3", breaks = 20)
