@@ -1,1 +1,97 @@
-code for ANOVA for one species 
+library(raster)
+# Package to handle raster-formatted spatial data
+library(rasterVis)
+# The rasterVis package complements the raster package, providing a set of methods for enhanced visualization and interaction
+library(dismo)
+# Dismo has the SDM analyses for maxent and support vector machines
+library(rgeos)
+# To define circles with a radius around the subsampled points
+library(rJava)
+# Needed to interface R and Java for maxent functions
+library(rgdal)
+# Used for co-ordinate reference system
+library(sp)
+# Used for co-ordinate reference system
+library(ncdf4)
+# Options for using NetCDF files
+library(kernlab)
+# Required for support vector machines
+library(grDevices)
+# For colouring maps
+library(colorRamps)
+
+#Species no lagoon
+tubificoide<-raster("march_tubificoide.tif")
+doversole<-raster("march_doversole2.tif")
+astrominius<-raster("march_astrominius2.tif")
+cancer<-raster("march_cancerpagurus.tif")
+hediste<-raster("march_hediste.tif")
+
+#Species static lagoon
+l_tubificoide<-raster("March_tubificoide_lagoon.tif")
+l_doversole<-raster("March_doversole_lagoon.tif")
+l_astrominius<-raster("March_lagoon_astro.tif")
+l_cancer<-raster("March_cancer_lagoon.tif")
+l_hediste<-raster("March_hediste_lagoon.tif")
+
+#Species dynamic lagoon
+d_tubificoide<-raster("March_tubificoide_dynamic.tif")
+d_doversole<-raster("March_doversole_dynamic.tif")
+d_astrominius<-raster("March_dynamic_astro.tif")
+d_cancer<-raster("March_cancer_dynamic2.tif")
+d_hediste<-raster("March_hediste_dynamic.tif")
+
+#Species ecological lagoon
+e_tubificoide<-raster("March_tubificoide_ecology.tif")
+e_doversole<-raster("March_doversole_ecology.tif")
+e_astrominius<-raster("March_ecology_astro.tif")
+e_cancer<-raster("March_cancer_ecology.tif")
+e_hediste<-raster("March_hediste_ecology.tif")
+
+#TUBIFI
+library(raster)
+library(ggpubr)
+
+#load rasters
+no_lagoon_tubif<-raster("march_tubificoide.tif")
+lagoon_tubif<-raster("March_tubificoide_lagoon.tif")
+dynamlagoon_tubif<-raster("March_tubificoide.tif")
+ecolagoon_tubif<-raster("March_tubificoide_ecology.tif")
+
+#extract data
+no_lagoon_tubif_values<-getValues(no_lagoon_tubif)
+lagoon_tubif_values<-getValues(lagoon_tubif)
+dynamlagoon_tubif_values<-getValues(dynamlagoon_tubif)
+ecolagoon_tubif_values<-getValues(ecolagoon_tubif)
+
+#remove blank areas
+no_lagoon_tubif_values<-no_lagoon_tubif_values[!is.na(no_lagoon_tubif_values)]
+lagoon_tubif_values<-lagoon_tubif_values[!is.na(lagoon_tubif_values)]
+dynamlagoon_tubif_values<-dynamlagoon_tubif_values[!is.na(dynamlagoon_tubif_values)]
+ecolagoon_tubif_values<-ecolagoon_tubif_values[!is.na(ecolagoon_tubif_values)]
+
+#create the data
+data = c(no_lagoon_tubif_values, lagoon_tubif_values, dynamlagoon_tubif_values, ecolagoon_tubif_values)
+
+#name the columns
+groups<- factor(c(rep("NL", length(no_lagoon_tubif_values)), rep("WL", length(lagoon_tubif_values)), rep("ECO", length(ecolagoon_tubif_values)), rep("DYN", length(dynamlagoon_tubif_values))))
+
+#normalise data
+#log worked best
+ggqqplot(no_lagoon_tubif_values)
+ggqqplot(log(no_lagoon_tubif_values))
+ggqqplot(sqrt(no_lagoon_tubif_values))
+ggqqplot(1/log(no_lagoon_tubif_values))
+ggqqplot(asin(sqrt(no_lagoon_tubif_values)))
+
+#log trasform and re-create data
+data = c(log(no_lagoon_tubif_values), log(lagoon_tubif_values), log(dynamlagoon_tubif_values), log(ecolagoon_tubif_values))
+
+#name columns
+groups<-factor(c(rep("NL",length(no_lagoon_tubif_values)), rep("WL",length(lagoon_tubif_values)), rep("DYN", length(dynamlagoon_tubif_values)), rep("ECO", length(ecolagoon_tubif_values))))
+fit<-lm(formula = data ~ groups)
+res.aov<-aov(fit)
+summary(res.aov)
+
+TukeyHSD(res.aov)
+
