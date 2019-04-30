@@ -1,1 +1,29 @@
-Code for how you did it, i incuded both with and withut prey species but it depends how many you did 
+allspecies<-read.csv("no_lagoon_allspecies.csv", header=TRUE, sep=",")
+slagoon_allspecies<-read.csv("slagoon_allspecies.csv", header = TRUE, sep = ",")
+dlagoon_allspecies<-read.csv("dlagoon_allspecies.csv", header = TRUE, sep = ",")
+elagoon_allspecies<-read.csv("elagoon_allspecies.csv", header = TRUE, sep = ",")
+
+hist(allspecies$lagoon, xlab = "Probability of Species Presence", border = "black", col = "rosybrown3")
+hist(slagoon_allspecies$lagoon, xlab = "Probability of Species Presence", border = "black", col = "rosybrown3")
+hist(dlagoon_allspecies$lagoon, xlab = "Probability of Species Presence", border = "black", col = "rosybrown3")
+hist(elagoon_allspecies$lagoon, xlab = "Probability of Species Presence", border = "black", col = "rosybrown3")
+
+wilcox.test(allspecies$lagoon, slagoon$lagoon, conf.int=TRUE)
+
+median(allspecies$lagoon, na.rm=TRUE)
+median(slagoon_allspecies$lagoon, na.rm=TRUE)
+
+wilcox.test(allspecies$lagoon, dlagoon$lagoon, conf.int=TRUE)
+
+median(allspecies$lagoon, na.rm=TRUE)
+median(dlagoon_allspecies$lagoon, na.rm=TRUE)
+
+wilcox.test(allspecies$lagoon, elagoon$lagoon, conf.int=TRUE)
+
+median(allspecies$lagoon, na.rm=TRUE)
+median(elagoon_allspecies$lagoon, na.rm=TRUE)
+
+#violin plots 
+data <- read.csv("alllagoons.csv",header=T)
+ggplot(data, aes(x=Lagoon,y=Area_km2,fill=Lagoon))+geom_violin(trim=F)+geom_boxplot(width=0.1)+scale_color_brewer(palette="Dark2")
+
